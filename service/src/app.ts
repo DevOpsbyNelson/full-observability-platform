@@ -20,8 +20,14 @@ app.use(
       if (res.statusCode >= 400) return 'warn';
       return 'info';
     },
+    // Container healthchecks hit this every 30s; logging them is noise.
+    autoLogging: { ignore: (req) => req.url === '/health/ping' },
   }),
 );
+
+app.get('/health/ping', (_req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok' });
+});
 
 app.get('/', (req: Request, res: Response) => {
   req.log.debug('handling root request');

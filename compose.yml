@@ -1,0 +1,19 @@
+services:
+  service:
+    build:
+      context: ./service
+    image: full-observability-platform/service:local
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      SERVICE_NAME: service
+    restart: unless-stopped
+    # The app writes nothing to disk; logs go to stdout.
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 15s
