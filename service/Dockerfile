@@ -3,14 +3,14 @@
 # Multi-stage production build.
 #
 # Stages:
-#   prod-deps  - production-only install (no devDependencies) from the lockfile
-#   runtime    - final image: prod node_modules + src only, non-root, tini as PID 1
+#   build    - full (dev+prod) install from the lockfile, then `pnpm build`:
+#              Rolldown bundles src/ and its dependencies into one file,
+#              minified with Oxc (see rolldown.config.ts)
+#   runtime  - final image: dist/ only (no node_modules), non-root, tini as PID 1
 #
-# There is no build stage: Node 26 strips TypeScript types natively, so the
-# service runs src/app.ts as-is (same as `pnpm start`). Type checking belongs
-# in CI (`pnpm typecheck`), not in the image.
+# Type checking belongs in CI (`pnpm typecheck`); Rolldown only strips types.
 
-FROM node:26.12.1-slim AS prod-deps
+FROM node:26.12.1-slim AS build
 WORKDIR /app
 
 RUN npm install -g pnpm@12.4.1
@@ -18,7 +18,11 @@ RUN npm install -g pnpm@12.4.1
 # Manifest + lockfile first so the install layer stays cached until
 # dependencies actually change.
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --prod --frozen-lockfile
+RUN pnpm install --frozen-lockfile
+
+COPY tsconfig.json rolldown.config.ts ./
+COPY src ./src
+RUN pnpm build
 
 # ---------------------------------------------------------------------------
 
@@ -36,10 +40,10 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends tini \
   && rm -rf /var/lib/apt/lists/*
 
+# The bundle is self-contained; the source map keeps stack traces in the logs
+# pointing at src/ instead of minified code.
 # node:*-slim ships a non-root `node` user (uid/gid 1000) - reuse it.
-COPY --chown=node:node --from=prod-deps /app/node_modules ./node_modules
-COPY --chown=node:node package.json ./
-COPY --chown=node:node src ./src
+COPY --chown=node:node --from=build /app/dist ./dist
 
 USER node
 
@@ -52,4 +56,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 ENTRYPOINT ["tini", "--"]
 # Exec form: node is tini's direct child and receives signals itself.
-CMD ["node", "src/app.ts"]
+CMD ["node", "--enable-source-maps", "dist/app.mjs"]
