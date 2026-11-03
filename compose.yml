@@ -5,6 +5,7 @@ services:
     image: full-observability-platform/service:local
     ports:
       - "3001:3000"
+      - "9464:9464"
     env_file: .env
     restart: unless-stopped
     # The app writes nothing to disk; logs go to stdout.
@@ -14,6 +15,82 @@ services:
     cap_drop:
       - ALL
     stop_grace_period: 15s
+    depends_on:
+      - alloy
+
+  # Receives OTLP traces/logs from the services; tail-samples traces into
+  # Tempo and forwards logs to Loki. Ports stay on the private network.
+  alloy:
+    build:
+      context: ./observability/alloy
+    image: full-observability-platform/alloy:local
+    env_file: .env
+    volumes:
+      - alloy-data:/var/lib/alloy/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - tempo
+      - loki
+
+  tempo:
+    build:
+      context: ./observability/tempo
+    image: full-observability-platform/tempo:local
+    env_file: .env
+    environment:
+      # .env is shared; with this set, Tempo traces itself into Alloy, which
+      # sends those spans back to Tempo in a loop. Empty disables it.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ""
+    volumes:
+      # Blocks only. The WAL stays in the container's /tmp on purpose so a
+      # replacement container never shares it; see tempo.yaml.
+      - tempo-data:/var/tempo
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  loki:
+    build:
+      context: ./observability/loki
+    image: full-observability-platform/loki:local
+    volumes:
+      - loki-data:/loki
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  prometheus:
+    build:
+      context: ./observability/prometheus
+    image: full-observability-platform/prometheus:local
+    ports:
+      - "9090:9090"
+    env_file: .env
+    volumes:
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - alertmanager
+
+  # Receives firing alerts from Prometheus (PROMETHEUS_ALERT_MANAGER_TARGET)
+  # and notifies Slack. SLACK_WEBHOOK_URL and SLACK_ALERTS_CHANNEL are required.
+  alertmanager:
+    build:
+      context: ./observability/alertmanager
+    image: full-observability-platform/alertmanager:local
+    ports:
+      - "9093:9093"
+    env_file: .env
+    volumes:
+      # Silences and notification state survive restarts.
+      - alertmanager-data:/alertmanager
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
   grafana:
     build:
@@ -35,6 +112,15 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 3
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
 
 volumes:
   grafana-data:
+  alloy-data:
+  tempo-data:
+  loki-data:
+  prometheus-data:
+  alertmanager-data:
