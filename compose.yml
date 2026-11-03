@@ -4,11 +4,8 @@ services:
       context: ./service
     image: full-observability-platform/service:local
     ports:
-      - "3000:3000"
-    environment:
-      NODE_ENV: production
-      LOG_LEVEL: info
-      SERVICE_NAME: service
+      - "3001:3000"
+    env_file: .env
     restart: unless-stopped
     # The app writes nothing to disk; logs go to stdout.
     read_only: true
@@ -17,3 +14,27 @@ services:
     cap_drop:
       - ALL
     stop_grace_period: 15s
+
+  grafana:
+    build:
+      context: ./observability/grafana
+    image: full-observability-platform/grafana:local
+    ports:
+      - "3000:3000"
+    # GF_SECURITY_ADMIN_PASSWORD must be set there, or Grafana falls back to admin/admin.
+    env_file: .env
+    volumes:
+      # Dashboards, users and plugin state survive container rebuilds.
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+volumes:
+  grafana-data:

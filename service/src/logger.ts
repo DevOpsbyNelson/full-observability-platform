@@ -3,7 +3,7 @@ import { pino, type LoggerOptions } from 'pino';
 const isProduction = process.env.NODE_ENV === 'production';
 
 const options: LoggerOptions = {
-  level: process.env.LOG_LEVEL ?? (isProduction ? 'info' : 'debug'),
+  level: isProduction ? 'info' : 'debug',
   base: {
     service: process.env.SERVICE_NAME ?? 'service',
     env: process.env.NODE_ENV ?? 'development',

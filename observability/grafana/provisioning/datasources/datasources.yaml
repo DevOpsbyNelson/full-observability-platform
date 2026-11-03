@@ -1,0 +1,5 @@
+# Data sources Grafana creates on startup. Add Loki/Prometheus/Tempo here as
+# they join compose.yml.
+apiVersion: 1
+
+datasources: []
