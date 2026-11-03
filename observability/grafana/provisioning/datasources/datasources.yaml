@@ -27,11 +27,14 @@ datasources:
         datasourceUid: prometheus
       nodeGraph:
         enabled: true
+      # "Logs for this span": Loki stream labelled with the span's service, and
+      # lines carrying this trace's ID (the "traceid" field Alloy writes).
       tracesToLogsV2:
         datasourceUid: loki
-        filterByTraceID: true
         spanStartTimeShift: -5m
         spanEndTimeShift: 5m
+        customQuery: true
+        query: '{service_name="$${__span.tags["service.name"]}"} |= "$${__trace.traceId}"'
       tracesToMetrics:
         datasourceUid: prometheus
 
@@ -42,9 +45,10 @@ datasources:
     editable: false
     jsonData:
       # otelcol.exporter.loki writes each record as JSON with a "traceid"
-      # field; turn it into a link to the trace in Tempo.
+      # field; turn it into a "View in Tempo" button on every log line.
       derivedFields:
         - name: TraceID
           matcherRegex: '"traceid":"(\w+)"'
           datasourceUid: tempo
           url: "$${__value.raw}"
+          urlDisplayLabel: View in Tempo

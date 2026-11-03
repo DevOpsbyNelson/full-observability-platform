@@ -3,6 +3,7 @@ import { context, trace } from '@opentelemetry/api';
 import { getRPCMetadata } from '@opentelemetry/core';
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import { pinoHttp } from 'pino-http';
+import { demoRouter } from './demo.ts';
 import { sdk } from './instrumentation.ts';
 import { logger } from './logger.ts';
 import { withSyncSpan } from './tracer.ts';
@@ -56,6 +57,10 @@ app.get('/', (req: Request, res: Response) => {
   });
   res.send(greeting);
 });
+
+if (process.env.DEMO_ROUTES === 'true') {
+  app.use('/demo', demoRouter);
+}
 
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   req.log.error({ err }, 'unhandled request error');
